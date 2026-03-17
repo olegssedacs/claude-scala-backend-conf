@@ -80,3 +80,53 @@ CREATE INDEX idx_my_view_table_some_col ON my_view_table (some_id, created_at DE
 
 - `modules/app/src/main/resources/db/migration/app`
 
+## Reactor List
+
+Reactor names registered in `ReactorsEnv.scala`.
+
+### Entity views (entityView)
+- `domain.CustomerViewReactor`
+- `domain.BrandViewReactor`
+- `domain.BusinessViewReactor`
+- `domain.InvoiceViewReactor`
+- `domain.GlobalSettingsViewReactor`
+
+### Model views (modelView)
+- `domain.CustomerAccountPathReactor`
+- `domain.CustomerPendingActionViewReactor`
+- `domain.CustomerRecurringTransferViewReactor`
+- `view.CustomerPhoneContactsReactor`
+- `domain.BrandAccountPathReactor`
+- `domain.BusinessPendingActionViewReactor`
+- `domain.InvoiceAccountPathReactor`
+- `domain.CurrencyExchangeTxStatementReactor`
+- `domain.CurrencyExchangeFinOpViewReactor`
+- `domain.InternalTransferTxStatementReactor`
+- `domain.InternalTransferFinOpViewReactor`
+- `domain.SepaDepositTxStatementReactor`
+- `domain.SepaDepositFinOpViewReactor`
+- `domain.SepaWithdrawalTxStatementReactor`
+- `domain.SepaWithdrawalFinOpViewReactor`
+- `domain.CryptoDepositTxStatementReactor`
+- `domain.CryptoDepositWalletSweepReactor`
+- `domain.CryptoDepositFinOpViewReactor`
+- `domain.InvoiceProcessEventReactor`
+- `domain.CryptoWithdrawalTxStatementReactor`
+- `domain.CryptoWithdrawalFinOpViewReactor`
+
+### Side-effect only (function)
+- `domain.CustomerEventReactor`
+- `domain.CustomerNotificationReactor`
+- `domain.BrandNotificationReactor`
+- `domain.BusinessNotificationReactor`
+- `domain.KycReviewNotificationReactor`
+- `domain.IbanAllocationReactor`
+- `domain.CurrencyExchangeNotificationReactor`
+- `domain.InternalTransferNotificationReactor`
+- `domain.SepaDepositNotificationReactor`
+- `domain.SepaWithdrawalNotificationReactor`
+- `domain.CryptoDepositNotificationReactor`
+- `domain.CryptoWithdrawalNotificationReactor`
+- `domain.InvoiceEventReactor`
+
+
