@@ -67,7 +67,6 @@ CREATE INDEX idx_my_view_table_some_col ON my_view_table (some_id, created_at DE
 
 - **View-model / projection table** → always drop+recreate + reactor_seq_nr cleanup
 - **Non-view table** (config, domain state) → additive only (`ALTER TABLE ADD COLUMN`, new indexes)
-- **NEVER modify an existing applied migration** — always create a new version
 
 ## NEVER
 
@@ -81,6 +80,3 @@ CREATE INDEX idx_my_view_table_some_col ON my_view_table (some_id, created_at DE
 
 - `modules/app/src/main/resources/db/migration/app`
 
-## Coordinate
-
-- For view-model Scala code (reactor + repository), use `$view-model-reactors`.
