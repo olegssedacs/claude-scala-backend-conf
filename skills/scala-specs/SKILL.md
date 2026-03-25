@@ -35,7 +35,7 @@ description: >
 |--------|--------|----------|
 | `domain-common` | `DomainSpec` | `given Conversion` for `Int/Long ↔ SubUnits`, `Double ↔ ExchangeRate` |
 | `domain` | `DomainSpecExt` | `fixedTime: Timestamp`, `TimestampFn.fixed()/.clock()/.now()`, `random.customerId()/.brandId()/.iosUdid()/.pushNotificationId()`, `given Conversion` for `String → TxId`, `Int/Long ↔ SubUnits` |
-| `domain` (event sourcing) | `EventSourcedBaseSpec` | `handleCommand[R](state, cmd)` helper — define type members `Command[+R]`, `Event`, `State`, provide `given` command/event handlers |
+| `domain` (processes) | `BaseProcessSpec[S, C, E]` | `specCase(...)`, `haveStep(n).as[EventType, StateType]` matcher — for testing event-sourced process state machines |
 | `domain-adapters` (JSON codecs) | `BaseSerializersSpec` | `decodeJsonFile[A]()`, `decodeJson[A]()`, `readJsonFile()`, `printJson[A]()` — loads from test resources |
 
 ## Project-Specific Deviations from Standard ScalaTest
@@ -98,32 +98,87 @@ new CommissionCalculator {
 If a dependency is a concrete class that cannot be anonymously implemented, tell the user:
 > `SomeDependency` is a concrete class, not a trait — cannot create an anonymous stub. Consider extracting a trait or advise on how to proceed.
 
-## Event Sourcing Test Pattern
+## Process Test Pattern (BaseProcessSpec)
 
-For testing event-sourced aggregates, extend `EventSourcedBaseSpec` and define the type members:
+For testing event-sourced process state machines (multi-step workflows with orchestration), use `BaseProcessSpec[S, C, E]` from `dev.fintech.domain.processes.spec`.
+
+### How it works
+
+`BaseProcessSpec` provides two things:
+- `specCase(commandHandler, eventHandler, orchestration)` — creates a `ProcessSpecCase` that drives the process without an ActorSystem
+- `haveStep(index).as[EventType, StateType]` — ScalaTest matcher for verifying the event and resulting state at each step
+
+`ProcessSpecCase` has two run modes:
+- `runOneStep(state, command)` — executes one command, returns `EvReport`
+- `runOrchestrated(state, commands)` — drives the full process lifecycle. Before consuming each command from the list, it checks the orchestration decision: if `Running`, it automatically sends `ProcessCommonCommand.Continue` instead of consuming the next command. If `Idle`/`Paused`, it consumes the next user command. If `Completed`, it stops.
+
+Each `EvStep` in the report holds a single `event` and the `state` after applying that event. One command producing 3 events yields 3 steps.
+
+### Structure
 
 ```scala
-class MyAggregateSpec extends AsyncFreeSpec with AsyncTaskSpec with Matchers with EventSourcedBaseSpec with DomainSpecExt {
-  type Command[+R] = MyCommand[R]
-  type Event        = MyEvent
-  type State        = MyState
+class MyProcessSpec extends AsyncFreeSpec with AsyncTaskSpec with Matchers with DomainSpecExt
+    with BaseProcessSpec[S, Command, Event] {
 
-  given commandHandler: MyCommandHandler = new MyCommandHandler(TimestampFn.fixed())
-  given eventHandler: MyEventHandler     = new MyEventHandler
+  // 1. Import syntax aliases (E, FE, FC, C, S, PC) from the process package
+  import myprocess.syntax.*
 
-  "on SomeCommand" - {
-    "should produce expected events and state" in {
-      handleCommand(initialState, MyCommand.DoSomething(params)).map { result =>
-        result.events shouldBe List(MyEvent.SomethingHappened(...))
-        result.state shouldBe expectedState
-        result.reply shouldBe expectedReply
+  // 2. Build stubs — prefer .fixed() on companion objects for simple cases,
+  //    anonymous trait implementations for state-dependent logic
+  private val myFnStub = MyFn.fixed(Some(FE.SomeEvent(fixedTime)))
+  private val complexStub = new ComplexFn {
+    override def apply(state: SomeState): Task[List[SomeEvent]] = {
+      state match {
+        case s: SomeState.CaseA => Task.pure(List(FE.EventA(fixedTime)))
+        case _                  => Task.pure(List(FE.EventB(fixedTime)))
+      }
+    }
+  }
+
+  // 3. Wire up the ProcessSpecCase
+  private val victim = specCase(
+    commandHandler = new MyCommandHandler(MyCommandHandler.Dependencies(
+      timestampFn = TimestampTaskFn.mk(TimestampFn.fixed()),
+      myFn        = myFnStub,
+      complexFn   = complexStub
+      // ...
+    )),
+    eventHandler  = new MyEventHandler,
+    orchestration = MyOrchestration
+  )
+
+  // 4. Test scenarios using runOrchestrated
+  "Scenario: happy path" - {
+    "should complete successfully" in {
+      val commands: List[Command] = List(
+        C.Start(...),
+        FC.SomeCommand(...)
+      )
+      for {
+        report <- victim.runOrchestrated(initialState, commands)
+      } yield {
+        report should haveStep(0).as[E.Started, S.Initializing]
+        report should haveStep(1).as[FE.SomeEvent, S.Processing]
+        // ...
+        report.state shouldBe a[S.Completed]
       }
     }
   }
 }
 ```
 
-`handleCommand` invokes the command handler, applies events via the event handler, and returns `EventSourcedResult(state, events, reply)`.
+### Key conventions
+
+- **Use syntax prefixes** for all events and commands: `E.Started`, `FE.TxHashUpdated`, `FC.UpdateTxHash`, `C.Start` — import them from the process's `syntax` object.
+- **Validated/opaque types**: add explicit type annotations and rely on `unsafe.given` implicit conversions instead of calling `.getUnsafe`:
+  ```scala
+  private val depositId: CryptoDepositId = CryptoDepositId.make(FinOpProviderRef("ref-1"))
+  private val txHash: CryptoTransactionHash.Ethereum = CryptoTransactionHash.Ethereum("0x" + "a" * 64)
+  ```
+- **Stub functions** with `.fixed()` when they produce a constant event regardless of input. Use anonymous implementations when the stub needs to inspect state or input to decide which event to return.
+- **`TimestampTaskFn`**: wrap `TimestampFn.fixed()` with `TimestampTaskFn.mk(TimestampFn.fixed())` — the command handler expects `TimestampTaskFn`, not `TimestampFn`.
+
+Reference implementation: `CryptoDepositSpec` in `modules/domain/src/test/scala/dev/fintech/domain/processes/finops2/cryptodeposit/`.
 
 ## Troubleshooting
 
