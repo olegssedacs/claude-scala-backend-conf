@@ -23,10 +23,10 @@ description: >
 
 ## Style Selection
 
-| Condition | Extends | Key Mixins |
-|-----------|---------|------------|
-| Pure code, small test cases (≤15 lines each) | `AnyWordSpec` | `Matchers` |
-| Pure code, large test cases (>15 lines) or large ADT transitions | `AsyncFunSuite` | `AsyncTaskSpec`, `Matchers` |
+| Condition | Extends         | Key Mixins |
+|-----------|-----------------|------------|
+| Pure code, small test cases (≤15 lines each) | `AnyWordSpec`   | `Matchers` |
+| Pure code, large test cases (>15 lines) or large ADT transitions | `AnyFunSuite`   | `Matchers` |
 | Effectful code (`Task`/`IO`-based) | `AsyncFreeSpec` | `AsyncTaskSpec`, `Matchers` |
 
 ### Module-specific mixins
