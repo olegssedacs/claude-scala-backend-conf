@@ -2,6 +2,9 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Workflow rules
+- After creating new files, always `git add` them immediately.
+
 ## Build & Test Commands
 
 This is an SBT (Scala Build Tool) project using Scala 3.3.3 on JVM 25.
