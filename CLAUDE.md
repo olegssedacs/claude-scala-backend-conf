@@ -97,6 +97,7 @@ GitLab CI (`.gitlab-ci.yml`):
 Flyway SQL migrations in `modules/app/src/main/resources/db/migration/app/` (V1–V35+).
 
 ## Code style
+- Always use imports — never use fully qualified type paths in code (e.g. write `CustomerId`, not `dev.fintech.domain.common.ids.CustomerId`).
 - use Scala 2 syntax with braces.
 - Pure FP - no `var`, no `null`, no throwing exceptions.
 - prefer `given` and `using` over `implicit`.
