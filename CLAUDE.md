@@ -4,6 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Workflow rules
 - After creating new files, always `git add` them immediately.
+- Never `git commit` anything.
+- Files in `.claude/` must NOT be added to git.
+- All plans, sketches, implementation logs, and similar artifacts must be kept in `.claude/plans`, `.claude/sketches`, `.claude/history`, `.claude/log`, etc.
 
 ## Build & Test Commands
 
