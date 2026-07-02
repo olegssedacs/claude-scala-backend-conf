@@ -3,21 +3,21 @@ name: wire-entity
 description: >
   Wire an already-existing event-sourced domain Entity into the event-sourcing infrastructure
   and app bootstrap — the plumbing that connects a finished domain entity (state, protocol,
-  command/event handlers, view, reactors) and its Circe codecs to a Cassandra journal, an actor
+  command/event handlers, view, reactors) and its Circe codecs to a Postgres journal, an actor
   guardian, reactor sinks, and the *Env wiring. Use the existing Brand entity as the reference.
   This is NOT about authoring a new domain entity, writing handlers, reactors, or codecs — those
   are assumed to already exist; the skill only does the infra/app wiring. Trigger whenever the
   user wants to "wire", "hook up", "register", "plug in", "connect", or "bootstrap" an existing
   entity into event sourcing, or mentions wiring an entity's journal, guardian, EntityDefinitions,
-  JournalDefinitions, ReactorUpdatesSinks, Reactors, EvEntities, DomainReposEnv, or ReactorsEnv.
+  PostgresJournalDefinitions, ReactorUpdatesSinks, Reactors, EvEntities, DomainReposEnv, or ReactorsEnv.
   Trigger on: wire entity, hook up entity, register entity, plug in entity, connect entity to
-  journal, add entity guardian, EntityDefinitions, JournalDefinitions, Journals, ReactorUpdatesSinks,
-  Reactors wiring, EvEntities, ReactorsEnv, wire event sourcing.
+  journal, add entity guardian, EntityDefinitions, PostgresJournalDefinitions, PostgresJournals,
+  Journals, ReactorUpdatesSinks, Reactors wiring, EvEntities, ReactorsEnv, wire event sourcing.
 ---
 
 # Wire an existing Entity into event-sourcing
 
-The domain entity is already written. This skill connects it to the runtime: a Cassandra
+The domain entity is already written. This skill connects it to the runtime: a Postgres
 journal, an actor guardian that routes commands, reactor sinks that fan events out to the
 existing reactors, the read-model repo, and the `*Env` bootstrap. Mirror the existing
 **`Brand`** entity — it is the simplest fully-wired entity (account, domain view, Postgres
@@ -44,15 +44,15 @@ missing site.
 ## Why the wiring is shaped this way
 
 Event sourcing + CQRS: `Command → CommandHandler → Event → EventHandler → State`, events
-appended to a **Cassandra** journal, **Reactors** replaying the stream to build read models and
-fire side effects. The wiring layer (in `infra/domain-adapters` and `modules/app/.../envs`)
-binds the abstract domain handlers/reactors to concrete journals, codecs, actor guardians, and
-sinks. The single import every site uses is `import dev.fintech.domain.entities.xxx.syntax as Xxx`.
+appended to a **PostgreSQL** journal (dedicated `journal` schema, via `libs/postgres-journal`),
+**Reactors** replaying the stream to build read models and fire side effects. The wiring layer
+(in `infra/domain-adapters` and `modules/app/.../envs`) binds the abstract domain
+handlers/reactors to concrete journals, codecs, actor guardians, and sinks. The single import every site uses is `import dev.fintech.domain.entities.xxx.syntax as Xxx`.
 
 ## Reference files — read the Brand analog before each step
 
 - `eventsourcing/entities/{EntityDefinition,EntityDefinitions,EvEntities}.scala`
-- `eventsourcing/common/{EvDefinition,JournalDefinition,JournalDefinitions,Journals}.scala`
+- `eventsourcing/common/{EvDefinition,PostgresJournalDefinition,PostgresJournalDefinitions,Journals,PostgresJournals}.scala`
 - `eventsourcing/reactors/{ReactorUpdatesSinks,Reactors}.scala`
 - `modules/infra/domain-adapters/.../brand/BrandViewRepositoryImpl.scala`
 - `modules/app/.../envs/{ActorSystemEnv,EntitiesEnv,DomainReposEnv,ReactorsEnv}.scala`
@@ -84,19 +84,27 @@ to the case class and `make`, and `private def xxxDef(timestampFn)` wiring
 guardian (`name = "XxxGuardian"`, `definition = definitions.xxx`, `journal = journals.xxx`,
 `sink = sinks.xxx`), `actorOf(xxxG, "xxxs")`, and thread it into the returned `EvEntities`.
 
-### 4. JournalDefinition — journal + Cassandra schema + codecs
+### 4. PostgresJournalDefinition — journal tables + codecs
 
-`eventsourcing/common/JournalDefinitions.scala`. Add the `xxx` field to the case class, `make`,
-and the `schemas` list; add `private def xxxDef(keyspace)` with `import XxxSerializers.given`,
-`JournalSchema(keyspace, "xxx_events", "xxx_snapshots", "xxx_ids")`,
-`idCodec = JournalCodec[XxxId](_.valueUrlSafe)(XxxId.ofUuidString)`,
-`stateCodec = Circe2Journal[Xxx.S]`, `eventCodec = Circe2Journal[Xxx.Event]`. (Cassandra tables
-auto-create from `schema.queries` at startup — no manual Cassandra DDL.)
+`eventsourcing/common/PostgresJournalDefinitions.scala`. Add the
+`xxx: PostgresJournalDefinition[XxxId, Xxx.S, Xxx.Event]` field to the case class, the
+`xxx = xxxDef(schema)` entry in `make`, and `xxx.schema` to the `schemas` list; add
+`private def xxxDef(schemaName: String)` with `import XxxSerializers.given` returning
+`PostgresJournalDefinition.of(idCodec = ..., stateCodec = PostgresJournalCodec.circe[Xxx.S],
+eventCodec = PostgresJournalCodec.circe[Xxx.Event], schema = schemaName,
+eventsTableName = "xxx_events", snapshotsTableName = "xxx_snapshots", idsTableName = "xxx_ids")`.
+For the id codec: plain-UUID ids use
+`PostgresJournalIdCodec.uuid[XxxId](_.value)(id => Right(XxxId(id)))`; UUIDv5-backed ids use
+`PostgresJournalIdCodec.uuid[XxxId](_.value.value)(ofUUIDv5(XxxId.apply))`; non-UUID ids use
+`PostgresJournalIdCodec.text` (see the `credentials` def). (Journal tables auto-create at
+startup: `ActorSystemEnv.Postgres.make` runs the DDL from `schemas.flatMap(_.queries)` —
+journal tables are NOT Flyway-managed.)
 
-### 5. Journals — instantiate
+### 5. Journals — trait member + Postgres instance
 
-`eventsourcing/common/Journals.scala`. Add the `xxx` field and
-`xxx = mkJournal(cassandra, definitions.xxx)` in `make`.
+`eventsourcing/common/Journals.scala`: add `def xxx: Journal[Task, XxxId, Xxx.S, Xxx.Event]` to
+the `Journals` trait. `eventsourcing/common/PostgresJournals.scala`: add the matching
+`override val xxx` field and `xxx = mkJournal(doobie, definitions.xxx)` in `make`.
 
 ### 6. ReactorUpdatesSinks — event fan-out sink
 
@@ -133,11 +141,13 @@ and add `xxxGroup._2` to `journalTasks`.
 
 `modules/app/src/main/resources/db/migration/app/V{next}__xxx_view.sql`. Add the snapshot/
 projection table(s) the view repo and projection reactors read/write, if not already present.
-Use the **flyway-migrations** skill. (Only Postgres needs SQL; Cassandra journal tables auto-migrate.)
+Use the **flyway-migrations** skill. (Flyway is only for view/projection tables; the journal
+tables in the `journal` schema auto-create at startup — never add them to Flyway.)
 
 ## Verify & finish
 
-- Compile with **sbt**, not IDE diagnostics: `sbt compile`. Format: `sbt scalafmtAll`.
+- Compile with **sbt**, not IDE diagnostics: `sbt compile`. Format only the files you changed:
+  `sbt "<module>/scalafmtOnly <path> ..."` (never `scalafmtAll` — see CLAUDE.md workflow rules).
 - `sbt unit-test` if you touched anything testable.
 - `git add` new files immediately. **Never** `git commit`. Do not add anything under `.claude/`.
 

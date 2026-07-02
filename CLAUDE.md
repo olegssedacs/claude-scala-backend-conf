@@ -3,10 +3,14 @@
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## Workflow rules
+- STRICT RULE: ANY question asked to the user must NEVER fall back to a default by timeout — always wait for the user's actual answer, no matter how long it takes.
+- STRICT RULE: If ANY decision is needed at ANY point during implementation — a deviation from ANY plan, an unexpected code reality, an ambiguity, a naming/design choice not already settled — STOP immediately and ask the user. Never pick an alternative silently, never proceed on a timeout, never substitute a recommendation for an answer. Wait until the user actually answers.
+- NEVER change an agreed decision during implementation without asking first. If implementation reveals a problem with a decision (e.g. the chosen approach doesn't work on the target/test backend), STOP and ask before deviating — do not silently pick an alternative.
 - After creating new files, always `git add` them immediately.
 - Never `git commit` anything.
 - Files in `.claude/` must NOT be added to git.
 - All plans, sketches, implementation logs, and similar artifacts must be kept in `.claude/plans`, `.claude/sketches`, `.claude/history`, `.claude/log`, etc.
+- NEVER run `sbt scalafmtAll` — it reformats the whole repo and pollutes the diff. Format only the files you changed: `sbt "<module>/scalafmtOnly <path> ..."` with paths ABSOLUTE or relative to the module directory, not the repo root (e.g. `sbt "domain-adapters/scalafmtOnly src/main/scala/.../MyFn.scala"`; use `<module>/Test/scalafmtOnly` for test sources).
 
 ## Build & Test Commands
 
@@ -15,13 +19,13 @@ This is an SBT (Scala Build Tool) project using Scala 3.3.3 on JVM 25.
 ```bash
 sbt compile              # Compile all modules
 sbt unit-test            # Run unit tests across all testable modules
-sbt itest                # Run integration tests (requires Cassandra, PostgreSQL, Redis)
+sbt itest                # Run integration tests (requires PostgreSQL, Redis, MinIO)
 sbt itestLocal           # Integration tests with local config (debug logging)
 sbt itestDocker          # Integration tests with Docker config (info logging)
 sbt app/run              # Run the main application
 sbt app/jibImageBuild    # Build Docker image
-sbt scalafmtAll          # Format all Scala sources
 sbt scalafmtCheckAll     # Check formatting without modifying
+# Formatting: never scalafmtAll — see Workflow rules; format changed files only via <module>/scalafmtOnly
 ```
 
 To run a single test class:
@@ -36,8 +40,7 @@ Code formatting: `.scalafmt.conf` — Scala 3 dialect, max 160 columns.
 ### Overview
 
 Fintech backend application using **event sourcing** with a **CQRS** pattern:
-- **Cassandra** stores the event journal (append-only event log)
-- **PostgreSQL** stores view snapshots and configuration (migrated via Flyway)
+- **PostgreSQL** stores everything: the event journal (append-only event log, dedicated `journal` schema via `libs/postgres-journal`), view snapshots, and configuration (migrated via Flyway)
 - **Redis** for caching
 - **MinIO** for object/file storage (S3-compatible)
 
@@ -46,7 +49,8 @@ The application is built with pure functional Scala using **Cats Effect** (IO mo
 ### Module Structure
 
 - `modules/libs/dsl2cats` - Domain monad DSL for Cats Effect IO monad.
-- **`modules/libs/`** — Reusable infrastructure libraries (eventsourcing, caching, database drivers, blockchain support, HTTP utilities)
+- **`modules/libs/`** — Reusable infrastructure libraries (eventsourcing, postgres-journal, caching, database drivers, blockchain support, HTTP utilities)
+- **`modules/common/`** — Shared utilities used across modules
 - **`modules/domain-common/`** — Shared domain value objects, validation, and types
 - **`modules/domain/`** — Core business logic organized by subdomain:
   - `finops` — Financial operations (core)
@@ -54,24 +58,30 @@ The application is built with pure functional Scala using **Cats Effect** (IO mo
   - `kyc` / `kyt` — KYC/KYT compliance
   - `transfers` — Money transfers
   - `trading` — Trading operations
+  - `currency` — Currencies and rates
+  - `a2f` — Action second-factor confirmation (2FA for operations)
+  - `actions` — Pending user actions
+  - `services` — Domain services (e.g. OTP)
   - `processes` — Long-running business workflows (state machines)
   - `reactors` — Event-driven side-effect handlers
   - `facades` — Service interfaces for complex operations
   - `providers` — Pluggable external provider integrations
 - **`modules/infra/`** — Infrastructure layer:
   - `api` — HTTP4s REST API endpoints, JWT auth middleware, error handling
-  - `auth` — JWT/JWS token management
+  - `auth` / `auth-jwt` — JWT/JWS token management
   - `domain-adapters` — Adapters implementing domain interfaces
+  - `outbound` — Outbound integrations with external services
   - `serializers` — Circe JSON serialization
-- **`modules/apis/`** — External API definitions (fintech-api, fireblocks-api, management-api)
+- **`modules/apis/`** — External API definitions (fintech-api, fireblocks-api, management-api, openapi-utils)
 - **`modules/app/`** — Application entry point, configuration loading, environment setup, Flyway migrations
 - **`modules/control-panel/`** — Admin/control panel
-- **`modules/simulators/`** — Local simulators for ClearJunction, currency rates, Fireblocks
+- **`modules/simulators/`** — Local simulators for ClearJunction, currency rates, Fireblocks, Nexpay
+- **`modules/unit-tests/`** — Aggregated unit test runner (`sbt unit-test` = `unit-tests/test`)
 - **`modules/i-tests/`** — Integration tests
 
 ### Key Patterns
 
-- **Event Sourcing**: Domain events stored in Cassandra journal, state reconstructed by replaying events. Periodic snapshots written to PostgreSQL for read views.
+- **Event Sourcing**: Domain events stored in the PostgreSQL journal (`journal` schema), state reconstructed by replaying events. Periodic snapshots written to PostgreSQL for read views.
 - **Reactors**: Event-driven handlers that produce side effects in response to domain events.
 - **Processes**: State machines for multi-step business workflows (e.g., payouts).
 - **Facades**: Domain service interfaces abstracting complex multi-aggregate operations.
@@ -97,7 +107,7 @@ GitLab CI (`.gitlab-ci.yml`):
 
 ### Database Migrations
 
-Flyway SQL migrations in `modules/app/src/main/resources/db/migration/app/` (V1–V35+).
+Flyway SQL migrations in `modules/app/src/main/resources/db/migration/app/` (V1–V53+).
 
 ## Code style
 - Always use imports — never use fully qualified type paths in code (e.g. write `CustomerId`, not `dev.fintech.domain.common.ids.CustomerId`).
