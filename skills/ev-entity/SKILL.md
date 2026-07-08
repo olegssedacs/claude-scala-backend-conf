@@ -31,14 +31,23 @@ Customer, Invoice — `HasAccountsStateId`, `HasAccount`, union `Command`/`Event
 STOP and tell the user account-holding entities are out of this skill's scope and are
 hand-crafted from the Brand reference.
 
-## The architecture in one paragraph
+## Layout in one paragraph
 
-Event sourcing + CQRS: `Command → CommandHandler → Effect.persist(Event) → EventHandler →
-State`, events appended to the PostgreSQL journal, state rebuilt by replay. A **View** is the
-read-model projection saved by a **ViewReactor** through a **ViewRepository**. All domain
-artifacts live in `modules/domain`, the ID in `modules/domain-common`, codecs in
-`modules/infra/serializers`. The one import every downstream layer uses is
-`import dev.fintech.domain.entities.xxx.syntax.*` (or `syntax as Xxx`).
+All domain artifacts live in `modules/domain` under `entities/xxx/`; the ID in
+`modules/domain-common` (`ids/StateId.scala`); codecs in `modules/infra/serializers`
+(`domain/xxx/`); the reactor in `modules/domain/.../reactors/`. The **View** is the
+read-model projection saved by the **ViewReactor** through the **ViewRepository**. The one
+import every downstream layer uses is `import dev.fintech.domain.entities.xxx.syntax.*`
+(or `syntax as Xxx`) — keep its alias letters exact; wiring and codecs rely on them.
+
+## Before scaffolding, check
+
+- **Entity or process?** If it's a long-running multi-step workflow / state machine
+  (delays, retries, orchestration), it's a **process** — stop, this skill doesn't apply
+  (authoring is hand-crafted from IbanAllocation; wiring is **wire-process**).
+- **Accounts?** If it must hold money accounts → out of scope, tell the user (see above).
+- **Name collision?** Grep `entities/` for the package name and `ids/StateId.scala` for
+  `XxxId` before creating anything — a clash means asking the user, not renaming silently.
 
 ## Step 0 — Ask the user first (wait for answers, never default)
 
@@ -101,9 +110,25 @@ object Xxx {
 
 Commands extend `EntityCommand[Reply]` and always carry `id`, `by: UpdateBy`,
 `at: Timestamp`; events extend `EntityEvent` and always carry `by`, `at`. Single-reply
-variant shown; for the per-command style replace the reply section with a
-`sealed trait XxxReply` marker + `sealed trait CreateXxxReply extends XxxReply` object pair
-(see `BrandProtocol` for the shape), and type `Create` with `CreateXxxReply`.
+variant shown below; for the **per-command** style replace the reply section with:
+
+```scala
+  sealed trait XxxReply
+  object XxxReply {
+    given CanEqual[XxxReply, XxxReply] = CanEqual.derived
+  }
+
+  sealed trait CreateXxxReply extends XxxReply
+  object CreateXxxReply {
+    sealed trait Failure                     extends CreateXxxReply
+    case object InvalidCommandInCurrentState extends Failure
+    case object Success                      extends CreateXxxReply
+  }
+```
+
+then type `Create` as `XxxCommand[CreateXxxReply]` (drop the `private type R`); the syntax
+`R` alias still points at the marker `XxxReply`. Each later command gets its own
+`<Verb>XxxReply` ADT beside it.
 
 ```scala
 package dev.fintech.domain.entities.xxx
@@ -317,21 +342,33 @@ Follow the **circe-codecs** skill (read it) for the details. The scaffold needs,
   `Codec[E]` via `DiscriminatorCodecHelper[E]("_t")` (mirror `CredentialsSerializers`)
 - `given XxxViewCodec: Codec[V] = deriveCodec`
 
+## NEVER
+
+- **NEVER define the ID outside `ids/StateId.scala`** — `StateId`/`EntityId` are sealed;
+  a new ID anywhere else won't compile.
+- **NEVER copy the brand/globalsettings layout** — single `handlers/` package and
+  wrap-the-state views are legacy; new entities use `commandhandlers/` + `eventhandlers/`
+  and field-projecting views with `of(...): Option[V]`.
+- **NEVER use Brand as the authoring template** — it is the *wiring* reference for
+  wire-entity and carries account unions plus the legacy layout; the authoring reference
+  is Credentials.
+- **NEVER implement the `???` stubs or invent domain fields** — the scaffold contract is
+  structure only; a "helpfully" filled-in handler injects unreviewed business logic.
+- **NEVER skip `CanEqual` derivations** — strictEquality is on; downstream pattern matches
+  and `==` fail to compile without them.
+- **NEVER answer the Step 0 questions yourself or proceed on a timeout** — wait for the
+  user's actual answer, then scaffold.
+- **NEVER `sbt scalafmtAll`** — it reformats the whole repo and pollutes the diff; use
+  `<module>/scalafmtOnly` on touched files only. Never `git commit`; never `git add`
+  anything under `.claude/`.
+
 ## Finish
 
 1. `git add` every new file immediately (never anything under `.claude/`). `StateId.scala`
    is an edit, not a new file.
 2. `sbt compile` (never trust IDE diagnostics alone).
-3. Format only the touched files: `sbt "<module>/scalafmtOnly <path> ..."` — never
-   `scalafmtAll`.
+3. Format only the touched files: `sbt "<module>/scalafmtOnly <path> ..."`.
 4. **Hand off to wiring**: invoke the **wire-entity** skill now and follow it end to end —
    it creates the `XxxViewRepositoryImpl`, the `EntityDefinition`, guardian, journal
    definition, reactor sinks/groups, `*Env` wiring, and the Flyway view table. All
    wire-entity preconditions are satisfied by the files above.
-
-## Conventions (from CLAUDE.md)
-
-- Always use imports, never fully-qualified type paths. Scala 2 brace syntax. Pure FP.
-- `final case class`; derive `CanEqual` (strictEquality is on); prefer `given`/`using`.
-- Computational concepts: `trait` + companion factory + anonymous impl, not a `class`.
-- Keep comments minimal.
