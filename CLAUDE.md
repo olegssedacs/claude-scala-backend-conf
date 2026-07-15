@@ -82,6 +82,7 @@ The application is built with pure functional Scala using **Cats Effect** (IO mo
 ### Key Patterns
 
 - **Event Sourcing**: Domain events stored in the PostgreSQL journal (`journal` schema), state reconstructed by replaying events. Periodic snapshots written to PostgreSQL for read views.
+- **No secrets in events**: Events never store sensitive information (plain credentials, keys). They store a `secretId` referencing the actual secret in Vault.
 - **Reactors**: Event-driven handlers that produce side effects in response to domain events.
 - **Processes**: State machines for multi-step business workflows (e.g., payouts).
 - **Facades**: Domain service interfaces abstracting complex multi-aggregate operations.
@@ -93,7 +94,12 @@ Domain layer is isolated from infrastructure. Dependency direction: `domain` ←
 
 ### Configuration
 
-Main config: `modules/app/src/main/resources/application.conf` (HOCON format). Environment variables override defaults via `${?VAR_NAME}` pattern. PureConfig loads typed case classes.
+Configuration consists of 3 layers, resolved with priority `value = env(secret(default))` — an environment variable overrides a secret, which overrides the default:
+1. `application.conf` (`modules/app/src/main/resources/`, HOCON format) — defaults.
+2. `secrets` namespace — provided by a separate HOCON file.
+3. Environment variables — override via the `${?VAR_NAME}` pattern.
+
+PureConfig loads typed case classes.
 
 The app runs on port **9090** by default. Health check endpoint: `/app/health/liveness`.
 
