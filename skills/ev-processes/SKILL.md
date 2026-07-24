@@ -202,13 +202,11 @@ object XxxState {
 ### F4. Syntax aliases — `syntax.scala`
 
 Keep the exact alias letters — the finops2 convention is **`PC`** for
-`ProcessCommonCommand` (never `CC` here; that is the non-finop/legacy alias). `FE`/`FC`
-aliases join the file when common events/commands enter the unions.
+`ProcessCommonCommand` (never `CC` here; that is the non-finop/legacy alias).
 
 ```scala
 package dev.fintech.domain.processes.finops2.xxx
 
-import dev.fintech.domain.common.time.Timestamp
 import dev.fintech.libs.eventsourcing.model.ProcessCommonCommand
 
 object syntax {
@@ -224,14 +222,13 @@ object syntax {
   val PC: ProcessCommonCommand.type  = ProcessCommonCommand
   val S: XxxState.type               = XxxState
 
-  extension (e: Event) {
-    def at: Timestamp = e match {
-      case e: E => e.at
-    }
-  }
-
 }
 ```
+
+When common events enter the `Event` union, this file gains the `FE`/`FC` aliases and the
+`extension (e: Event) { def at: Timestamp = ... }` dispatching over `E | FE` (see
+`internaltransfer/syntax.scala`). Do not add the extension while `Event = E` — it is dead
+code (the `FinOpEvent.at` member always wins).
 
 ### F5. Command handler — `XxxCommandHandler.scala`
 
