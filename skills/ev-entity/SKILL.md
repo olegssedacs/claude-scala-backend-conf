@@ -10,7 +10,8 @@ description: >
   "author", "generate", or "make" a new entity, aggregate, or event-sourced entity — e.g.
   "create entity Sequencer" — or mentions a new EntityState, entity protocol, entity ID,
   StateId, or a new aggregate root. This is NOT for wiring an already-written entity (that is
-  wire-entity alone) and NOT for processes (see wire-process). Trigger on: create entity,
+  wire-entity alone) and NOT for processes (authoring: ev-processes; wiring: wire-process).
+  Trigger on: create entity,
   new entity, add entity, scaffold entity, event-sourced entity, new aggregate, ev-entity,
   entity protocol, EntityState, new StateId.
 ---
@@ -44,7 +45,7 @@ import every downstream layer uses is `import dev.fintech.domain.entities.xxx.sy
 
 - **Entity or process?** If it's a long-running multi-step workflow / state machine
   (delays, retries, orchestration), it's a **process** — stop, this skill doesn't apply
-  (authoring is hand-crafted from IbanAllocation; wiring is **wire-process**).
+  (authoring is the **ev-processes** skill; wiring is **wire-process**).
 - **Accounts?** If it must hold money accounts → out of scope, tell the user (see above).
 - **Name collision?** Grep `entities/` for the package name and `ids/StateId.scala` for
   `XxxId` before creating anything — a clash means asking the user, not renaming silently.
