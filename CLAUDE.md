@@ -3,6 +3,7 @@
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## Workflow rules
+- STRICT RULE: DO NOT IMPLEMENT ANYTHING UNTIL THE USER SAYS IT DIRECTLY. Resuming a topic, discussing, or planning is NOT permission to write code. If it's not clear what to do — ASK.
 - STRICT RULE: ANY question asked to the user must NEVER fall back to a default by timeout — always wait for the user's actual answer, no matter how long it takes.
 - STRICT RULE: If ANY decision is needed at ANY point during implementation — a deviation from ANY plan, an unexpected code reality, an ambiguity, a naming/design choice not already settled — STOP immediately and ask the user. Never pick an alternative silently, never proceed on a timeout, never substitute a recommendation for an answer. Wait until the user actually answers.
 - NEVER change an agreed decision during implementation without asking first. If implementation reveals a problem with a decision (e.g. the chosen approach doesn't work on the target/test backend), STOP and ask before deviating — do not silently pick an alternative.
