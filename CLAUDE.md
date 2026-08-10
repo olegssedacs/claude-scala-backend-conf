@@ -120,6 +120,7 @@ Flyway SQL migrations in `modules/app/src/main/resources/db/migration/app/` (V1�
 - Always use imports — never use fully qualified type paths in code (e.g. write `CustomerId`, not `dev.fintech.domain.common.ids.CustomerId`).
 - use Scala 2 syntax with braces.
 - all multiline bodies must be wrapped in braces: `def f(...) = { ... }` — never a brace-less multiline expression body (single-line bodies may omit braces; `def f = x match { ... }` is fine, the match braces count).
+- named arguments are REQUIRED when: (1) a call passes same-typed parameter pairs (`from`/`to`, `min`/`max`, two amounts) — always name them, even if local vals mirror the parameter names (a swap compiles silently); (2) a call has more than 3 arguments. Positional is fine otherwise (≤3 args of distinct types, obvious wrappers like `Some(x)`/`OptionT(task)`).
 - Pure FP - no `var`, no `null`, no throwing exceptions.
 - prefer `given` and `using` over `implicit`.
 - `implicitConversions` is enabled
