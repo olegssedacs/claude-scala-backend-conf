@@ -119,6 +119,7 @@ Flyway SQL migrations in `modules/app/src/main/resources/db/migration/app/` (V1�
 ## Code style
 - Always use imports — never use fully qualified type paths in code (e.g. write `CustomerId`, not `dev.fintech.domain.common.ids.CustomerId`).
 - use Scala 2 syntax with braces.
+- all multiline bodies must be wrapped in braces: `def f(...) = { ... }` — never a brace-less multiline expression body (single-line bodies may omit braces; `def f = x match { ... }` is fine, the match braces count).
 - Pure FP - no `var`, no `null`, no throwing exceptions.
 - prefer `given` and `using` over `implicit`.
 - `implicitConversions` is enabled
